@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 type Synonym = {
   word: string;
   context: string;
+  source?: string;
 };
 
 type Replacement = {
@@ -29,29 +30,8 @@ type TextMetrics = {
   rareWordsDensity: number;
 };
 
-const mockSynonyms: Record<string, Synonym[]> = {
-  'light': [
-    { word: 'illumination', context: 'radiation, brightness' },
-    { word: 'radiance', context: 'glow, luminescence' },
-    { word: 'weightless', context: 'for weight context' },
-    { word: 'pale', context: 'for color context' }
-  ],
-  'создать': [
-    { word: 'сформировать', context: 'образовать, построить' },
-    { word: 'разработать', context: 'спроектировать' },
-    { word: 'организовать', context: 'учредить, основать' }
-  ],
-  'быстрый': [
-    { word: 'скорый', context: 'стремительный' },
-    { word: 'проворный', context: 'ловкий, шустрый' },
-    { word: 'оперативный', context: 'срочный, экстренный' }
-  ],
-  'текст': [
-    { word: 'содержание', context: 'контент' },
-    { word: 'материал', context: 'документ' },
-    { word: 'документ', context: 'файл, запись' }
-  ]
-};
+const SYNONYMS_API = 'https://functions.poehali.dev/3eed8b79-9c4f-411f-90d8-5780dbd692d2';
+const EXPORT_API = 'https://functions.poehali.dev/140db063-1cfa-4a13-8a9c-c9985f906b9e';
 
 const Index = () => {
   const [text, setText] = useState('');
@@ -63,6 +43,7 @@ const Index = () => {
   const [searchDirection, setSearchDirection] = useState('ru-ru');
   const [metrics, setMetrics] = useState<TextMetrics | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const calculateMetrics = (textContent: string): TextMetrics => {
@@ -99,7 +80,29 @@ const Index = () => {
     }
   }, [text]);
 
-  const handleTextSelection = () => {
+  const fetchSynonyms = async (word: string, context: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(SYNONYMS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word, context, lang: '' })
+      });
+      
+      if (!response.ok) throw new Error('API request failed');
+      
+      const data = await response.json();
+      return data.synonyms || [];
+    } catch (error) {
+      console.error('Synonyms API error:', error);
+      toast.error('Не удалось загрузить синонимы');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTextSelection = async () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       setPopupPosition(null);
@@ -117,7 +120,7 @@ const Index = () => {
         y: rect.top - 10
       });
 
-      const foundSynonyms = mockSynonyms[selectedText.toLowerCase()] || [];
+      const foundSynonyms = await fetchSynonyms(selectedText.toLowerCase(), text);
       setSynonyms(foundSynonyms);
     }
   };
@@ -142,37 +145,55 @@ const Index = () => {
     toast.success('Слово заменено');
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchTerm.trim()) return;
     
-    const foundSynonyms = mockSynonyms[searchTerm.toLowerCase()] || [];
+    const foundSynonyms = await fetchSynonyms(searchTerm.toLowerCase(), text);
     setSynonyms(foundSynonyms);
     setSelectedWord(searchTerm.toLowerCase());
     toast.info(`Найдено ${foundSynonyms.length} синонимов`);
   };
 
-  const exportToText = () => {
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'synapse-text.txt';
-    a.click();
-    toast.success('Текст экспортирован');
-  };
+  const exportDocument = async (format: 'pdf' | 'docx') => {
+    if (!text.trim()) {
+      toast.error('Добавьте текст для экспорта');
+      return;
+    }
 
-  const exportReplacements = () => {
-    const replacementsText = replacements
-      .map(r => `${r.original} → ${r.replacement} (${r.timestamp.toLocaleString()})`)
-      .join('\n');
-    
-    const blob = new Blob([replacementsText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'synapse-replacements.txt';
-    a.click();
-    toast.success('История замен экспортирована');
+    setLoading(true);
+    try {
+      const response = await fetch(EXPORT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          replacements: replacements.map(r => ({
+            original: r.original,
+            replacement: r.replacement,
+            timestamp: r.timestamp.toLocaleString('ru-RU')
+          })),
+          format
+        })
+      });
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const data = await response.json();
+      const blob = await fetch(`data:${data.contentType};base64,${data.content}`).then(r => r.blob());
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Экспортировано в ${format.toUpperCase()}`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Ошибка экспорта');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -189,13 +210,13 @@ const Index = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={exportToText}>
-              <Icon name="Download" size={16} className="mr-2" />
-              Экспорт текста
+            <Button variant="outline" size="sm" onClick={() => exportDocument('pdf')} disabled={loading}>
+              <Icon name="FileDown" size={16} className="mr-2" />
+              PDF
             </Button>
-            <Button variant="outline" size="sm" onClick={exportReplacements}>
+            <Button variant="outline" size="sm" onClick={() => exportDocument('docx')} disabled={loading}>
               <Icon name="FileText" size={16} className="mr-2" />
-              Экспорт замен
+              DOCX
             </Button>
           </div>
         </div>
@@ -318,13 +339,24 @@ const Index = () => {
                     </div>
 
                     <ScrollArea className="h-[500px]">
-                      {synonyms.length > 0 ? (
+                      {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Icon name="Loader2" className="animate-spin text-primary" size={32} />
+                        </div>
+                      ) : synonyms.length > 0 ? (
                         <div className="space-y-2">
                           {synonyms.map((syn, idx) => (
                             <Card key={idx} className="p-3 cursor-pointer hover:bg-accent transition-colors">
                               <div className="flex items-start justify-between">
-                                <div>
-                                  <p className="font-medium">{syn.word}</p>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium">{syn.word}</p>
+                                    {syn.source && (
+                                      <Badge variant={syn.source === 'contextual' ? 'default' : 'secondary'} className="text-xs">
+                                        {syn.source === 'contextual' ? '🤖 AI' : '📚 API'}
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <p className="text-xs text-muted-foreground mt-1">{syn.context}</p>
                                 </div>
                                 <Button

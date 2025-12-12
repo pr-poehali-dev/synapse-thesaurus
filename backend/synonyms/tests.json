@@ -1,0 +1,47 @@
+{
+  "tests": [
+    {
+      "name": "Get English synonyms",
+      "method": "POST",
+      "body": {
+        "word": "light",
+        "context": "The light in the room was very bright",
+        "lang": "en"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "word": "string",
+        "language": "string",
+        "synonyms": "array",
+        "count": "number"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get Russian synonyms",
+      "method": "POST",
+      "body": {
+        "word": "быстрый",
+        "context": "Он был очень быстрый бегун",
+        "lang": "ru"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "word": "string",
+        "language": "string",
+        "synonyms": "array"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Missing word returns error",
+      "method": "POST",
+      "body": {},
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

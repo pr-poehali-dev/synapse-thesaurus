@@ -1,0 +1,55 @@
+{
+  "tests": [
+    {
+      "name": "Export to PDF",
+      "method": "POST",
+      "body": {
+        "text": "This is a test document for export functionality.",
+        "replacements": [
+          {
+            "original": "test",
+            "replacement": "sample",
+            "timestamp": "2025-01-01 12:00:00"
+          }
+        ],
+        "format": "pdf"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "filename": "string",
+        "content": "string",
+        "contentType": "string",
+        "size": "number"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Export to DOCX",
+      "method": "POST",
+      "body": {
+        "text": "Another test document",
+        "replacements": [],
+        "format": "docx"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "filename": "string",
+        "content": "string",
+        "contentType": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Missing text returns error",
+      "method": "POST",
+      "body": {
+        "format": "pdf"
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
